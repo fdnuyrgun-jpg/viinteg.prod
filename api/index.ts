@@ -620,6 +620,11 @@ export default async function handler(req: any, res: any) {
         logger.error('Unhandled Exception', { error: error.message, stack: error.stack, url: req.url });
     }
 
+    // Explicitly return database configuration errors to the client for better DX
+    if (error.message && (error.message.includes('Configuration Error') || error.message.includes('DATABASE_URL'))) {
+         return res.status(500).json({ message: error.message });
+    }
+
     return res.status(statusCode).json({ message });
   }
 }

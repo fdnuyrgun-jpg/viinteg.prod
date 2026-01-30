@@ -5,7 +5,7 @@ import { User, Role, View } from './types';
 import { Button, Input } from './components/Common';
 import { ToastContainer } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { LayoutDashboard, Users, Book, FileText, Settings, LogOut, Menu, Briefcase, CheckSquare, Loader2, Moon, Sun, Check } from 'lucide-react';
+import { LayoutDashboard, Users, Book, FileText, Settings, LogOut, Menu, Briefcase, CheckSquare, Loader2, Moon, Sun, Github, Copy } from 'lucide-react';
 
 // Production lazy loading
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -44,6 +44,11 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
     }
   };
 
+  const fillDemo = () => {
+      setEmail('admin@corppulse.com');
+      setPassword('admin123');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 border border-slate-800 animate-fade-in">
@@ -69,10 +74,32 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
             </label>
           </div>
 
-          {error && <p className="text-red-500 text-xs font-bold text-center animate-pulse bg-red-900/10 py-2 rounded-lg">{error}</p>}
+          {error && (
+            <div className="text-red-500 text-xs font-bold text-center animate-pulse bg-red-900/10 py-3 rounded-lg px-2">
+                {error.includes("Configuration Error") 
+                    ? "⚠️ Не настроен файл .env.local (нет DATABASE_URL)" 
+                    : error}
+            </div>
+          )}
+          
           <Button type="submit" className="w-full h-14 rounded-2xl text-base shadow-xl shadow-blue-500/10" disabled={loading}>
             {loading ? <Loader2 className="animate-spin mr-2" /> : 'ВОЙТИ'}
           </Button>
+
+          <div 
+            onClick={fillDemo}
+            className="mt-6 p-4 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors group"
+          >
+            <div className="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-400 mb-2">
+                <span className="text-xs font-bold uppercase tracking-widest">Демо доступ</span>
+                <Copy size={12} />
+            </div>
+            <div className="flex justify-center gap-2 font-mono text-xs text-slate-300">
+                <span className="bg-slate-950 px-2 py-1 rounded">admin@corppulse.com</span>
+                <span className="opacity-50">/</span>
+                <span className="bg-slate-950 px-2 py-1 rounded">admin123</span>
+            </div>
+          </div>
         </form>
       </div>
     </div>
@@ -173,6 +200,20 @@ const App: React.FC = () => {
             )}
           </nav>
           <div className="mt-auto pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+            
+            {/* GitHub Link */}
+            <a 
+                href="https://github.com/your-username/vintegcorp" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+                <div className="flex items-center gap-3 font-bold text-xs uppercase tracking-widest">
+                    <Github size={18} />
+                    <span>GitHub</span>
+                </div>
+            </a>
+
             <button 
                 onClick={toggleTheme} 
                 className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
