@@ -1,12 +1,12 @@
 
-import { sql, toSnakeCase } from '../lib/db';
-import { hashPassword, verifyPassword, signToken, verifyToken } from '../lib/auth';
+import { sql, toSnakeCase } from '../lib/db.js';
+import { hashPassword, verifyPassword, signToken, verifyToken } from '../lib/auth.js';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { 
   UserSchema, LoginSchema, TaskSchema, ArticleSchema, 
   AnnouncementSchema, ChangePasswordSchema, ProjectSchema
-} from '../lib/schemas';
+} from '../lib/schemas.js';
 
 // --- Production Utilities ---
 
