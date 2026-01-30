@@ -5,7 +5,7 @@ import { User, Role, View } from './types';
 import { Button, Input } from './components/Common';
 import { ToastContainer } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { LayoutDashboard, Users, Book, FileText, Settings, LogOut, Menu, Briefcase, CheckSquare, Loader2, Moon, Sun, Github, Copy } from 'lucide-react';
+import { LayoutDashboard, Users, Book, FileText, Settings, LogOut, Menu, Briefcase, CheckSquare, Loader2, Moon, Sun, Github } from 'lucide-react';
 
 // Production lazy loading
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -44,11 +44,6 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
     }
   };
 
-  const fillDemo = () => {
-      setEmail('admin@corppulse.com');
-      setPassword('admin123');
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 border border-slate-800 animate-fade-in">
@@ -58,7 +53,7 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
         <h2 className="text-3xl font-black text-center text-white mb-2 tracking-tighter italic">VIntegCorp</h2>
         <p className="text-center text-slate-500 mb-10 text-sm font-medium">Система управления предприятием</p>
         <form onSubmit={handleLogin} className="space-y-6">
-          <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="admin@corppulse.com" />
+          <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="employee@company.com" />
           <Input label="Пароль" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
           
           <div className="flex items-center">
@@ -75,9 +70,9 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
           </div>
 
           {error && (
-            <div className="text-red-500 text-xs font-bold text-center animate-pulse bg-red-900/10 py-3 rounded-lg px-2">
-                {error.includes("Configuration Error") 
-                    ? "⚠️ Не настроен файл .env.local (нет DATABASE_URL)" 
+            <div className="text-red-400 text-xs font-bold text-center animate-pulse bg-red-900/20 py-3 rounded-lg px-4 border border-red-900/50">
+                {error.includes("Configuration Error") || error.includes("DATABASE_URL")
+                    ? "⚠️ Ошибка сервера: Не настроено подключение к базе данных. Проверьте .env.local" 
                     : error}
             </div>
           )}
@@ -85,21 +80,6 @@ const Login: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
           <Button type="submit" className="w-full h-14 rounded-2xl text-base shadow-xl shadow-blue-500/10" disabled={loading}>
             {loading ? <Loader2 className="animate-spin mr-2" /> : 'ВОЙТИ'}
           </Button>
-
-          <div 
-            onClick={fillDemo}
-            className="mt-6 p-4 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors group"
-          >
-            <div className="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-400 mb-2">
-                <span className="text-xs font-bold uppercase tracking-widest">Демо доступ</span>
-                <Copy size={12} />
-            </div>
-            <div className="flex justify-center gap-2 font-mono text-xs text-slate-300">
-                <span className="bg-slate-950 px-2 py-1 rounded">admin@corppulse.com</span>
-                <span className="opacity-50">/</span>
-                <span className="bg-slate-950 px-2 py-1 rounded">admin123</span>
-            </div>
-          </div>
         </form>
       </div>
     </div>

@@ -56,9 +56,12 @@ class StoreService {
     });
 
     if (response.status === 401) {
-        this.logout();
-        window.location.reload(); 
-        throw new Error('Сессия истекла');
+        // Only logout if we actually had a token, to prevent loops on login page
+        if (this.token) {
+            this.logout();
+            window.location.reload(); 
+        }
+        throw new Error('Сессия истекла или неверные данные');
     }
 
     if (!response.ok) {
@@ -138,7 +141,7 @@ class StoreService {
       const updated = await this.apiRequest<User>(`/api/users/${this.currentUser.id}`, 'PATCH', data);
       this.currentUser = updated;
       
-      const storageKey = localStorage.getItem('vinteg_user') ? 'vinteg_user' : 'vinteg_user'; // Check which storage was used
+      const storageKey = localStorage.getItem('vinteg_user') ? 'vinteg_user' : 'vinteg_user'; 
       const storage = localStorage.getItem('vinteg_user') ? localStorage : sessionStorage;
       
       storage.setItem(storageKey, JSON.stringify(updated));
