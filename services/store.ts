@@ -1,6 +1,5 @@
 
 import { User, Role, Article, Announcement, DocumentFile, Task, TaskStatus, EmployeeUpdate, Project } from '../types';
-import { UserSchema } from '../lib/schemas';
 
 class StoreService {
   private currentUser: User | null = null;
@@ -15,7 +14,6 @@ class StoreService {
   }
 
   private restoreSession() {
-    // Check localStorage first (persistent), then sessionStorage (tab only)
     try {
         let savedUser = localStorage.getItem('vinteg_user');
         let savedToken = localStorage.getItem('vinteg_token');
@@ -27,8 +25,7 @@ class StoreService {
         
         if (savedUser && savedToken) {
           const parsed = JSON.parse(savedUser);
-          // Loose validation for restored session
-          if (parsed && parsed.id && parsed.email) {
+          if (parsed && parsed.id) {
             this.currentUser = parsed as User;
             this.token = savedToken;
           } else {
@@ -36,7 +33,6 @@ class StoreService {
           }
         }
     } catch (e) {
-        console.warn('Session restore failed, clearing storage');
         this.logout();
     }
   }
@@ -46,292 +42,177 @@ class StoreService {
     if (useCache && method === 'GET') {
       const cached = this.cache.get(url);
       if (cached && (Date.now() - cached.timestamp < this.CACHE_TTL)) {
-        return JSON.parse(JSON.stringify(cached.data)); // Return copy to prevent mutation
+        return JSON.parse(JSON.stringify(cached.data));
       }
     }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
 
-    const options: RequestInit = {
-      method,
-      headers,
-    };
-    if (body) options.body = JSON.stringify(body);
+    const response = await fetch(url, { 
+        method, 
+        headers, 
+        body: body ? JSON.stringify(body) : undefined 
+    });
 
-    const response = await fetch(url, options);
-    
-    // Auto logout on 401
     if (response.status === 401) {
-      this.logout();
-      window.location.reload(); 
-      throw new Error('Сессия истекла');
+        this.logout();
+        window.location.reload(); 
+        throw new Error('Сессия истекла');
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.message || `Ошибка сервера: ${response.status}`);
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Ошибка сервера: ${response.status}`);
     }
 
     if (response.status === 204) {
-      if (method !== 'GET') this.clearCache();
-      return {} as T;
+        if (method !== 'GET') this.clearCache();
+        return {} as T;
     }
 
     const data = await response.json();
+    
+    // Convert snake_case from DB to camelCase for Frontend
     const result = this.mapToCamel(data);
 
-    // 2. Set Cache
     if (useCache && method === 'GET') {
-      this.cache.set(url, { data: result, timestamp: Date.now() });
+        this.cache.set(url, { data: result, timestamp: Date.now() });
     }
     
-    // 3. Invalidate Cache on Mutations
-    // Aggressive invalidation: clear everything on any write operation to ensure consistency
-    if (method !== 'GET') {
-       this.clearCache(); 
-    }
+    // Invalidate cache on mutations
+    if (method !== 'GET') this.clearCache();
 
     return result;
+  }
+
+  // Helper: snake_case to camelCase (recursive)
+  private mapToCamel(obj: any): any {
+      if (Array.isArray(obj)) return obj.map(v => this.mapToCamel(v));
+      if (obj !== null && typeof obj === 'object') {
+          return Object.keys(obj).reduce((result, key) => {
+              const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+              result[camelKey] = this.mapToCamel(obj[key]);
+              return result;
+          }, {} as any);
+      }
+      return obj;
   }
 
   private clearCache() {
       this.cache.clear();
   }
 
-  private mapToCamel(obj: any): any {
-    if (Array.isArray(obj)) return obj.map(v => this.mapToCamel(v));
-    if (obj !== null && typeof obj === 'object') {
-      return Object.keys(obj).reduce((acc, key) => {
-        const camelKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase());
-        acc[camelKey] = this.mapToCamel(obj[key]);
-        return acc;
-      }, {} as any);
-    }
-    return obj;
-  }
+  // --- PUBLIC API METHODS ---
 
-  // --- AUTH ---
-  async login(email: string, password?: string, rememberMe: boolean = false): Promise<User> {
-    const response = await this.apiRequest<{ user: User, token: string }>('/api/auth/login', 'POST', { email, password });
-    this.currentUser = response.user;
-    this.token = response.token;
+  public async login(email: string, password: string, remember = false): Promise<User> {
+    const data = await this.apiRequest<{ user: User, token: string }>('/api/auth/login', 'POST', { email, password });
     
-    const storage = rememberMe ? localStorage : sessionStorage;
-    
-    // Clear other storage to avoid conflicts
-    if (rememberMe) {
-        sessionStorage.removeItem('vinteg_user');
-        sessionStorage.removeItem('vinteg_token');
+    this.currentUser = data.user;
+    this.token = data.token;
+
+    if (remember) {
+      localStorage.setItem('vinteg_user', JSON.stringify(this.currentUser));
+      localStorage.setItem('vinteg_token', this.token);
     } else {
-        localStorage.removeItem('vinteg_user');
-        localStorage.removeItem('vinteg_token');
+      sessionStorage.setItem('vinteg_user', JSON.stringify(this.currentUser));
+      sessionStorage.setItem('vinteg_token', this.token);
     }
-
-    storage.setItem('vinteg_user', JSON.stringify(this.currentUser));
-    storage.setItem('vinteg_token', this.token);
-    
     return this.currentUser;
   }
 
-  logout() {
+  public logout() {
     this.currentUser = null;
     this.token = null;
-    sessionStorage.removeItem('vinteg_user');
-    sessionStorage.removeItem('vinteg_token');
     localStorage.removeItem('vinteg_user');
     localStorage.removeItem('vinteg_token');
+    sessionStorage.removeItem('vinteg_user');
+    sessionStorage.removeItem('vinteg_token');
     this.clearCache();
   }
 
-  getCurrentUser() { return this.currentUser; }
+  public getCurrentUser() { return this.currentUser; }
 
-  // --- USERS ---
-  async getUsers(): Promise<User[]> {
-    return this.apiRequest<User[]>('/api/users', 'GET', undefined, true);
+  public async updateCurrentUser(data: Partial<User>) {
+      if (!this.currentUser) throw new Error('No user');
+      const updated = await this.apiRequest<User>(`/api/users/${this.currentUser.id}`, 'PATCH', data);
+      this.currentUser = updated;
+      
+      const storageKey = localStorage.getItem('vinteg_user') ? 'vinteg_user' : 'vinteg_user'; // Check which storage was used
+      const storage = localStorage.getItem('vinteg_user') ? localStorage : sessionStorage;
+      
+      storage.setItem(storageKey, JSON.stringify(updated));
+      this.clearCache();
+      return updated;
   }
 
-  async addUser(u: any): Promise<User> {
-    return this.apiRequest<User>('/api/users', 'POST', u);
+  public async changePassword(email: string, oldPass: string, newPass: string) {
+      return this.apiRequest('/api/auth/change-password', 'POST', { email, oldPass, newPass });
   }
 
-  async deleteUser(id: string): Promise<void> {
-    await this.apiRequest(`/api/users/${id}`, 'DELETE');
+  // Users
+  public async getUsers() { return this.apiRequest<User[]>('/api/users', 'GET', undefined, true); }
+  public async addUser(user: any) { return this.apiRequest<User>('/api/users', 'POST', user); }
+  public async deleteUser(id: string) { return this.apiRequest(`/api/users/${id}`, 'DELETE'); }
+
+  // Projects
+  public async getProjects() { return this.apiRequest<Project[]>('/api/projects', 'GET', undefined, true); }
+  public async addProject(project: any) { return this.apiRequest<Project>('/api/projects', 'POST', project); }
+  public async deleteProject(id: string) { return this.apiRequest(`/api/projects/${id}`, 'DELETE'); }
+
+  // Tasks
+  public async getTasks() { return this.apiRequest<Task[]>('/api/tasks', 'GET'); }
+  public async addTask(task: Partial<Task>) { return this.apiRequest<Task>('/api/tasks', 'POST', task); }
+  public async updateTask(id: string, data: Partial<Task>) { return this.apiRequest<Task>(`/api/tasks/${id}`, 'PATCH', data); }
+  public async updateTaskStatus(id: string, status: TaskStatus) { return this.apiRequest<Task>(`/api/tasks/${id}`, 'PATCH', { status }); }
+  public async deleteTask(id: string) { return this.apiRequest(`/api/tasks/${id}`, 'DELETE'); }
+
+  // Articles (Wiki)
+  public async getArticles() { return this.apiRequest<Article[]>('/api/articles', 'GET', undefined, true); }
+  public async addArticle(article: Partial<Article>) { return this.apiRequest<Article>('/api/articles', 'POST', article); }
+  public async updateArticle(id: string, article: Partial<Article>, userId: string) { return this.apiRequest<Article>(`/api/articles/${id}`, 'PATCH', { ...article, lastEditorId: userId }); }
+  public async deleteArticle(id: string) { return this.apiRequest(`/api/articles/${id}`, 'DELETE'); }
+
+  // Announcements
+  public async getAnnouncements() { return this.apiRequest<Announcement[]>('/api/announcements', 'GET'); }
+  public async addAnnouncement(ann: any) { return this.apiRequest<Announcement>('/api/announcements', 'POST', ann); }
+  public async deleteAnnouncement(id: string) { return this.apiRequest(`/api/announcements/${id}`, 'DELETE'); }
+  public async toggleAnnouncementLike(id: string, userId: string) { return this.apiRequest<Announcement>(`/api/announcements/${id}/like`, 'POST', { userId }); }
+  
+  public async addAnnouncementComment(id: string, user: User, content: string, mentions: string[]) {
+      return this.apiRequest<Announcement>(`/api/announcements/${id}/comments`, 'POST', { 
+        authorId: user.id, 
+        authorName: user.name, 
+        authorAvatar: user.avatarUrl, 
+        content, 
+        mentions 
+      });
+  }
+  
+  public async markAnnouncementAsRead(id: string, userId: string) {
+      return this.apiRequest(`/api/announcements/${id}/read`, 'POST', { userId });
   }
 
-  // --- PROJECTS ---
-  async getProjects(): Promise<Project[]> {
-    return this.apiRequest<Project[]>('/api/projects', 'GET', undefined, true);
+  // Feed (Employee Updates)
+  public async getEmployeeUpdates() { return this.apiRequest<EmployeeUpdate[]>('/api/feed', 'GET'); }
+  public async addEmployeeUpdate(content: string) { return this.apiRequest<EmployeeUpdate>('/api/feed', 'POST', { content }); }
+  public async toggleFeedLike(id: string, userId: string) { return this.apiRequest<EmployeeUpdate>(`/api/feed/${id}/like`, 'POST', { userId }); }
+  
+  public async addFeedComment(id: string, user: User, content: string, mentions: string[]) {
+      return this.apiRequest<EmployeeUpdate>(`/api/feed/${id}/comments`, 'POST', { 
+        authorId: user.id, 
+        authorName: user.name, 
+        authorAvatar: user.avatarUrl, 
+        content, 
+        mentions 
+      });
   }
 
-  async addProject(p: any): Promise<Project> {
-    return this.apiRequest<Project>('/api/projects', 'POST', p);
-  }
-
-  async deleteProject(id: string): Promise<void> {
-    await this.apiRequest(`/api/projects/${id}`, 'DELETE');
-  }
-
-  // --- TASKS ---
-  async getTasks(): Promise<Task[]> {
-    return this.apiRequest<Task[]>('/api/tasks', 'GET', undefined, true);
-  }
-
-  async addTask(t: any): Promise<Task> {
-    const body = { 
-      title: t.title,
-      description: t.description,
-      priority: t.priority,
-      assignee_name: t.assigneeName,
-      due_date: t.dueDate,
-      author_id: this.currentUser?.id,
-      project_id: t.projectId
-    };
-    return this.apiRequest<Task>('/api/tasks', 'POST', body);
-  }
-
-  async updateTask(id: string, data: any): Promise<Task> {
-    return this.apiRequest<Task>(`/api/tasks/${id}`, 'PATCH', data);
-  }
-
-  async deleteTask(id: string): Promise<void> {
-    await this.apiRequest(`/api/tasks/${id}`, 'DELETE');
-  }
-
-  async updateTaskStatus(id: string, status: TaskStatus): Promise<void> {
-    await this.apiRequest(`/api/tasks/${id}`, 'PATCH', { status });
-  }
-
-  // --- ARTICLES ---
-  async getArticles(): Promise<Article[]> {
-    return this.apiRequest<Article[]>('/api/articles', 'GET', undefined, true);
-  }
-
-  async addArticle(art: any): Promise<Article> {
-    const body = {
-      title: art.title,
-      content: art.content,
-      category: art.category,
-      folder: art.folder,
-      author_id: this.currentUser?.id,
-      attachments: art.attachments
-    };
-    return this.apiRequest<Article>('/api/articles', 'POST', body);
-  }
-
-  async updateArticle(id: string, art: any, _userId: string): Promise<Article> {
-    const body = {
-      title: art.title,
-      content: art.content,
-      category: art.category,
-      folder: art.folder,
-      attachments: art.attachments
-    };
-    return this.apiRequest<Article>(`/api/articles/${id}`, 'PATCH', body);
-  }
-
-  // --- FEED & ANNOUNCEMENTS ---
-  async getAnnouncements(): Promise<Announcement[]> {
-    return this.apiRequest<Announcement[]>('/api/announcements', 'GET', undefined, true);
-  }
-
-  async addAnnouncement(a: any): Promise<Announcement> {
-    return this.apiRequest<Announcement>('/api/announcements', 'POST', a);
-  }
-
-  async deleteAnnouncement(id: string): Promise<void> {
-    await this.apiRequest(`/api/announcements/${id}`, 'DELETE');
-  }
-
-  async toggleAnnouncementLike(id: string, userId: string): Promise<Announcement> {
-    return this.apiRequest<Announcement>(`/api/announcements/${id}/like`, 'POST', { userId });
-  }
-
-  async addAnnouncementComment(id: string, user: User, content: string, mentions: string[]): Promise<Announcement> {
-    const body = { 
-      content, 
-      mentions, 
-      author_id: user.id, 
-      author_name: user.name, 
-      author_avatar: user.avatarUrl 
-    };
-    return this.apiRequest<Announcement>(`/api/announcements/${id}/comments`, 'POST', body);
-  }
-
-  async markAnnouncementAsRead(id: string, userId: string): Promise<void> {
-    await this.apiRequest(`/api/announcements/${id}/read`, 'POST', { userId });
-  }
-
-  async getEmployeeUpdates(): Promise<EmployeeUpdate[]> {
-    return this.apiRequest<EmployeeUpdate[]>('/api/feed', 'GET', undefined, true);
-  }
-
-  async addEmployeeUpdate(content: string): Promise<EmployeeUpdate> {
-    return this.apiRequest<EmployeeUpdate>('/api/feed', 'POST', { content, author_id: this.currentUser?.id });
-  }
-
-  async toggleFeedLike(id: string, userId: string): Promise<EmployeeUpdate> {
-    return this.apiRequest<EmployeeUpdate>(`/api/feed/${id}/like`, 'POST', { userId });
-  }
-
-  async addFeedComment(id: string, user: User, content: string, mentions: string[]): Promise<EmployeeUpdate> {
-    const body = { 
-      content, 
-      mentions, 
-      author_id: user.id, 
-      author_name: user.name, 
-      author_avatar: user.avatarUrl 
-    };
-    return this.apiRequest<EmployeeUpdate>(`/api/feed/${id}/comments`, 'POST', body);
-  }
-
-  // --- DOCUMENTS ---
-  async getDocuments(_role: Role): Promise<DocumentFile[]> {
-    return this.apiRequest<DocumentFile[]>('/api/documents', 'GET', undefined, true);
-  }
-
-  async getDocument(id: string): Promise<DocumentFile> {
-    return this.apiRequest<DocumentFile>(`/api/documents/${id}`, 'GET');
-  }
-
-  async addDocument(doc: any): Promise<DocumentFile> {
-    const body = {
-      filename: doc.name,
-      mime_type: doc.type,
-      file_size_bytes: 0,
-      uploaded_by: this.currentUser?.id,
-      access_role: 'employee',
-      data: doc.data 
-    };
-    return this.apiRequest<DocumentFile>('/api/documents', 'POST', body);
-  }
-
-  async deleteDocument(id: string): Promise<void> {
-    await this.apiRequest(`/api/documents/${id}`, 'DELETE');
-  }
-
-  // --- PROFILE ---
-  async changePassword(email: string, oldPass: string, newPass: string): Promise<void> {
-    await this.apiRequest('/api/auth/change-password', 'POST', { email, oldPass, newPass });
-  }
-
-  async updateCurrentUser(data: any): Promise<User> {
-    if (!this.currentUser) throw new Error('User not logged in');
-    const user = await this.apiRequest<User>(`/api/users/${this.currentUser.id}`, 'PATCH', data);
-    this.currentUser = user;
-    
-    // Update storage based on where it was found
-    if (localStorage.getItem('vinteg_user')) {
-        localStorage.setItem('vinteg_user', JSON.stringify(user));
-    } else {
-        sessionStorage.setItem('vinteg_user', JSON.stringify(user));
-    }
-    
-    return user;
-  }
+  // Documents
+  public async getDocuments(role: string) { return this.apiRequest<DocumentFile[]>('/api/documents', 'GET'); }
+  public async getDocument(id: string) { return this.apiRequest<DocumentFile>(`/api/documents/${id}`, 'GET'); }
+  public async addDocument(doc: any) { return this.apiRequest<DocumentFile>('/api/documents', 'POST', doc); }
+  public async deleteDocument(id: string) { return this.apiRequest(`/api/documents/${id}`, 'DELETE'); }
 }
 
 export const store = new StoreService();
