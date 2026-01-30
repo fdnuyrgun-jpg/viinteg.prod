@@ -1,6 +1,7 @@
 
 import { neon } from '@neondatabase/serverless';
-import { SERVER_CONFIG } from './server-config';
+
+import { SERVER_CONFIG } from './server-config.js'; 
 
 let sqlClient: any = null;
 
