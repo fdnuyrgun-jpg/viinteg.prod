@@ -1,7 +1,8 @@
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { SERVER_CONFIG } from './server-config';
+// Было: import { SERVER_CONFIG } from './server-config';
+import { SERVER_CONFIG } from './server-config.js'; // Добавьте .js сюда
 
 const SECRET = SERVER_CONFIG.JWT_SECRET;
 
